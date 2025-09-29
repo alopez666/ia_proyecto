@@ -1,0 +1,103 @@
+# Nombre del workflow
+name: 'CI/CD: Construir y Publicar Imagen Docker'
+
+# --------------------------------------------------
+# DISPARADORES (TRIGGERS)
+# --------------------------------------------------
+on:
+  # 1. Se activa en cada push a la rama 'Lab-pruebas'
+  push:
+    branches:
+      - 'Lab-pruebas'
+    # 2. También se activa cuando se crea un tag con formato vX.Y.Z
+    tags:
+      - 'v*.*.*'
+
+  # 3. Se activa al crear o actualizar un Pull Request hacia 'Lab-pruebas'
+  #    (útil para validaciones automáticas)
+  pull_request:
+    branches:
+      - 'Lab-pruebas'
+
+  # 4. Permite la ejecución manual desde la pestaña "Actions" de GitHub
+  workflow_dispatch:
+
+# --------------------------------------------------
+# TRABAJOS (JOBS)
+# --------------------------------------------------
+jobs:
+  build-and-push:
+    # El trabajo se ejecuta en un servidor Ubuntu actualizado
+    runs-on: ubuntu-latest
+
+    # Permisos necesarios para que el job pueda:
+    # - contents: read -> Leer el código del repositorio.
+    # - packages: write -> Escribir (subir imágenes) en el registro de paquetes (GHCR).
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # --- PASO 1: CLONAR EL CÓDIGO ---
+      # 'fetch-depth: 0' es crucial para que la acción de metadatos pueda analizar todos los tags históricos del repo.
+      - name: Clonar el código del repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # --- PASO 2: INICIAR SESIÓN EN GHCR ---
+      # Se autentica en el registro de contenedores de GitHub para poder subir la imagen.
+      - name: Iniciar sesión en GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          # github.actor es el nombre de usuario que inició el workflow.
+          # secrets.GITHUB_TOKEN es un token con permisos limitados generado automáticamente por GitHub Actions.
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- PASO 3: CONFIGURAR DOCKER BUILDX ---
+      # Prepara un entorno de construcción de imágenes moderno y eficiente.
+      # Tomado de tu primer script para asegurar la compatibilidad y seguir las mejores prácticas.
+      - name: Configurar QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # --- PASO 4: EXTRAER METADATOS DE DOCKER ---
+      # Genera etiquetas (tags) y labels de forma inteligente basadas en el evento que disparó el workflow.
+      - name: Extraer metadatos (etiquetas y labels) para Docker
+        id: meta # Se le da un ID para poder usar sus resultados (outputs) en pasos posteriores.
+        uses: docker/metadata-action@v5
+        with:
+          # El nombre de la imagen será: ghcr.io/TU_USUARIO/NOMBRE_DEL_REPO
+          images: ghcr.io/${{ github.repository }}
+          # Define las reglas para generar las etiquetas (tags) de la imagen:
+          tags: |
+            # 1. Etiqueta con el hash del commit (ej: sha-a1b2c3d). Muy útil para desarrollo.
+            type=sha
+            # 2. Etiqueta 'latest' solo si el evento es un push a la rama 'Lab-pruebas'.
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'Lab-pruebas') }}
+            # 3. Etiqueta semántica (ej: v1.2.3) cuando creas un git tag con tu script 'git-release.sh'.
+            type=semver,pattern=v{{version}}
+
+      # --- PASO 5: CONSTRUIR Y SUBIR LA IMAGEN DOCKER ---
+      # Utiliza el Dockerfile del proyecto y los metadatos del paso anterior para construir y publicar la imagen.
+      - name: Construir y subir la imagen a GHCR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          # 'push: true' indica que la imagen se debe subir al registro tras ser construida.
+          # Esto se deshabilita automáticamente para eventos de 'pull_request' por seguridad.
+          push: ${{ github.event_name != 'pull_request' }}
+          # Se usan las etiquetas y labels generados en el paso 'meta'.
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Habilita el caché de capas de Docker para acelerar significativamente futuras construcciones.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- PASO 6: MENSAJE DE FINALIZACIÓN ---
+      - name: Finalización
+        run: echo "✅ ¡Workflow completado! Imagen Docker construida y subida exitosamente a GHCR."
