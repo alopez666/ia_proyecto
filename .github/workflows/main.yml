@@ -75,7 +75,7 @@ jobs:
         with:
           images: user9998/ia-traductor
           tags: |
-            type=raw,value=${{ steps.versioning.outputs.new_version }}
+            type=raw,value=${{ steps.versioning.outputs.new_tag }}
 
       # --- PASO 6: CONSTRUIR Y SUBIR LA IMAGEN DOCKER ---
       - name: Construir y subir la imagen a Docker Hub
