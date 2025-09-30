@@ -49,7 +49,7 @@ jobs:
         with:
           # IMPORTANTE: Reemplaza con tu usuario y el nombre de la imagen.
           # Formato: TU_USUARIO_DOCKERHUB/NOMBRE_DE_LA_IMAGEN
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/ia-traductor
+          images: user9998/ia-traductor
           tags: |
             type=semver,pattern=v{{version}}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/Lab-pruebas' }}
