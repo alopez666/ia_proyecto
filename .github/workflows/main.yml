@@ -27,28 +27,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      # --- PASO 2: CALCULAR LA SIGUIENTE VERSIÓN (Lógica de git-release.sh) ---
-      # Este paso replica lo que hacía tu script local.
+      # --- PASO 2: CALCULAR LA SIGUIENTE VERSIÓN (VERSIÓN CORREGIDA) ---
+      # Esta versión maneja correctamente el caso inicial cuando no hay tags.
       - name: Calcular la siguiente versión
         id: versioning
         run: |
-          # Sincroniza los tags del repositorio remoto.
           git fetch origin --tags
-          # Busca el último tag con formato v*.*.*, si no hay ninguno, empieza en v0.0.0.
-          LAST_TAG=$(git tag --list 'v*.*.*' | sort -V | tail -n 1 2>/dev/null || echo "v0.0.0")
-          # Extrae los números de la versión (MAJOR.MINOR.PATCH).
+          # Busca el último tag con formato v*.*.*
+          LAST_TAG=$(git tag --list 'v*.*.*' | sort -V | tail -n 1)
+          
+          # LA CORRECCIÓN: Si no se encuentra ningún tag, se establece v0.0.0 como el punto de partida.
+          if [[ -z "$LAST_TAG" ]]; then
+            LAST_TAG="v0.0.0"
+          fi
+          
+          # El resto del script funciona igual.
           BASE_NUM=${LAST_TAG#v}
           IFS='.' read -r MAJOR MINOR PATCH <<<"$BASE_NUM"
-          # Incrementa el número de PATCH.
           NEW_PATCH=$((PATCH + 1))
-          # Construye el nuevo tag de Git y la nueva versión para Docker.
           NEW_TAG="v${MAJOR}.${MINOR}.${NEW_PATCH}"
           NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
           
-          echo "Última versión: $LAST_TAG"
+          echo "Última versión encontrada: $LAST_TAG"
           echo "Nueva versión a crear: $NEW_TAG"
           
-          # Guarda las nuevas versiones como outputs para usarlas en pasos posteriores.
           echo "new_tag=${NEW_TAG}" >> $GITHUB_OUTPUT
           echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
 
