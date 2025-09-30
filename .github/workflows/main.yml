@@ -53,7 +53,6 @@ jobs:
           tags: |
             type=semver,pattern=v{{version}}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/Lab-pruebas' }}
-            type=sha,prefix=
 
       # --- PASO 5: CONSTRUIR Y SUBIR LA IMAGEN DOCKER ---
       # Construye la imagen y la sube a Docker Hub.
