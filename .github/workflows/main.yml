@@ -18,6 +18,8 @@ on:
 jobs:
   auto-version-and-release:
     runs-on: ubuntu-latest
+     permissions:      # <--- AÑADIR ESTE BLOQUE
+      contents: write # <--- PERMISO PARA ESCRIBIR EN EL REPO
     
     steps:
       # --- PASO 1: CLONAR EL CÓDIGO ---
