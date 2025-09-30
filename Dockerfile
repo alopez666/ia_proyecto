@@ -7,10 +7,11 @@ WORKDIR /app
 # Copiar dependencias
 COPY requirements.txt .
 
-# 1. Instalar la versión de PyTorch solo para CPU (mucho más pequeña)
-RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Instalar protobuf primero para evitar errores con transformers
+RUN pip install --no-cache-dir protobuf>=4.23.4
 
-# 2. Instalar el resto de las dependencias del proyecto
+# Instalar torch (CPU) y el resto de dependencias
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar la aplicación y start.sh
@@ -20,5 +21,5 @@ COPY start.sh .
 # Dar permisos de ejecución a start.sh
 RUN chmod +x start.sh
 
-# Comando por defecto para ejecutar start.sh
+# Comando por defecto
 CMD ["./start.sh"]
