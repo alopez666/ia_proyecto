@@ -1,71 +1,103 @@
 # Nombre del workflow
-name: 'CI/CD: Construir y Publicar Imagen en Docker Hub'
+name: 'CI/CD: Auto-Versionar, Construir y Publicar Imagen'
 
 # --------------------------------------------------
 # DISPARADORES (TRIGGERS)
 # --------------------------------------------------
 on:
+  # Se dispara SOLAMENTE al hacer push a la rama de pruebas.
   push:
     branches:
       - 'Lab-pruebas'
-    tags:
-      - 'v*.*.*'   # Se dispara cuando haces push de un tag como v1.2.3
-  pull_request:
-    branches:
-      - 'Lab-pruebas'
+  # Mantenemos el dispatch para ejecuciones manuales si lo necesitas.
   workflow_dispatch:
 
 # --------------------------------------------------
 # TRABAJOS (JOBS)
 # --------------------------------------------------
 jobs:
-  build-and-push-image:
+  auto-version-and-release:
     runs-on: ubuntu-latest
-
+    
     steps:
       # --- PASO 1: CLONAR EL CÓDIGO ---
+      # fetch-depth: 0 es crucial para traerse toda la historia y los tags.
       - name: Clonar el código del repositorio
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # --- PASO 2: INICIAR SESIÓN EN DOCKER HUB ---
+      # --- PASO 2: CALCULAR LA SIGUIENTE VERSIÓN (Lógica de git-release.sh) ---
+      # Este paso replica lo que hacía tu script local.
+      - name: Calcular la siguiente versión
+        id: versioning
+        run: |
+          # Sincroniza los tags del repositorio remoto.
+          git fetch origin --tags
+          # Busca el último tag con formato v*.*.*, si no hay ninguno, empieza en v0.0.0.
+          LAST_TAG=$(git tag --list 'v*.*.*' | sort -V | tail -n 1 2>/dev/null || echo "v0.0.0")
+          # Extrae los números de la versión (MAJOR.MINOR.PATCH).
+          BASE_NUM=${LAST_TAG#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<<"$BASE_NUM"
+          # Incrementa el número de PATCH.
+          NEW_PATCH=$((PATCH + 1))
+          # Construye el nuevo tag de Git y la nueva versión para Docker.
+          NEW_TAG="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          
+          echo "Última versión: $LAST_TAG"
+          echo "Nueva versión a crear: $NEW_TAG"
+          
+          # Guarda las nuevas versiones como outputs para usarlas en pasos posteriores.
+          echo "new_tag=${NEW_TAG}" >> $GITHUB_OUTPUT
+          echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+
+      # --- PASO 3: INICIAR SESIÓN EN DOCKER HUB ---
       - name: Iniciar sesión en Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # --- PASO 3: CONFIGURAR DOCKER BUILDX ---
+      # --- PASO 4: CONFIGURAR DOCKER BUILDX ---
       - name: Configurar Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # --- PASO 4: EXTRAER METADATOS DE DOCKER ---
-      # Genera las etiquetas (tags) a partir del tag de GitHub (vX.Y.Z).
+      # --- PASO 5: EXTRAER METADATOS DE DOCKER ---
+      # Ahora usa directamente la versión calculada en el paso 2.
       - name: Extraer metadatos (etiquetas y labels) para Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: user9998/ia-traductor
           tags: |
-            type=semver,pattern={{version}}   # Usa el tag vX.Y.Z y lo convierte en X.Y.Z
+            type=raw,value=${{ steps.versioning.outputs.new_version }}
 
-      # --- PASO 5: CONSTRUIR Y SUBIR LA IMAGEN DOCKER ---
+      # --- PASO 6: CONSTRUIR Y SUBIR LA IMAGEN DOCKER ---
       - name: Construir y subir la imagen a Docker Hub
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          # El push siempre se hace porque este workflow solo corre en la rama principal.
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # --- PASO 6: MENSAJE DE FINALIZACIÓN ---
-      - name: Mostrar etiquetas de la imagen generada
-        if: github.event_name != 'pull_request'
+      # --- PASO 7: CREAR Y SUBIR LA ETIQUETA DE GIT ---
+      # Este paso crea el tag en el repositorio para que el siguiente cálculo de versión sea correcto.
+      - name: Crear y subir la etiqueta de Git
         run: |
-          echo "✅ ¡Workflow completado!"
-          echo "Imagen subida exitosamente a Docker Hub con las siguientes etiquetas:"
-          echo "${{ steps.meta.outputs.tags }}"
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions@github.com"
+          git tag -a "${{ steps.versioning.outputs.new_tag }}" -m "Release automática ${{ steps.versioning.outputs.new_tag }}"
+          git push origin "${{ steps.versioning.outputs.new_tag }}"
+      
+      # --- PASO 8: MENSAJE DE FINALIZACIÓN ---
+      - name: Mostrar etiquetas de la imagen generada
+        run: |
+          echo "✅ ¡Workflow de release automático completado!"
+          echo "Imagen subida a Docker Hub con la etiqueta: ${{ steps.versioning.outputs.new_version }}"
+          echo "Etiqueta de Git creada en el repositorio: ${{ steps.versioning.outputs.new_tag }}"
