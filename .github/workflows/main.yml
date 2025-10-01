@@ -105,3 +105,5 @@ jobs:
           echo "✅ ¡Workflow de release automático completado!"
           echo "Imagen subida a Docker Hub con la etiqueta: ${{ steps.versioning.outputs.new_version }}"
           echo "Etiqueta de Git creada en el repositorio: ${{ steps.versioning.outputs.new_tag }}"
+
+          # FIN
