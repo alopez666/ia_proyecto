@@ -1,4 +1,3 @@
-# Imagen base
 FROM python:3.11-slim
 
 # Crear directorio de la app
@@ -7,14 +6,17 @@ WORKDIR /app
 # Copiar dependencias
 COPY requirements.txt .
 
-# Instalar todas las dependencias en una sola capa (layer)
-RUN pip install --no-cache-dir \
-    protobuf>=4.23.4 \
-    torch --index-url https://download.pytorch.org/whl/cpu \
-    -r requirements.txt
+# ------------------- INICIO DE LA CORRECCIÓN -------------------
+
+# Instala PyTorch usando su propio índice y el resto de paquetes desde PyPI en un solo paso.
+# Se usa --extra-index-url para AÑADIR el repositorio de PyTorch sin eliminar el de PyPI.
+RUN pip install --no-cache-dir -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+# -------------------- FIN DE LA CORRECCIÓN ---------------------
 
 # Copiar la aplicación y start.sh
-COPY app.py start.sh ./
+COPY app.py .
+COPY start.sh .
 
 # Dar permisos de ejecución a start.sh
 RUN chmod +x start.sh
