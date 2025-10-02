@@ -1,5 +1,3 @@
 #!/bin/bash
-# start.sh
-
-echo "Iniciando la aplicación FastAPI..."
-uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+echo "Iniciando la aplicación Gradio..."
+python app.py
