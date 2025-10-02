@@ -10,14 +10,14 @@ from langdetect import detect, LangDetectException
 model_name = "facebook/mbart-large-50-many-to-many-mmt"
 print("Cargando modelo, esto puede tardar unos segundos...")
 
-# --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
 # Se usa MBart50TokenizerFast para el tokenizer y MBartForConditionalGeneration para el modelo.
 tokenizer = MBart50TokenizerFast.from_pretrained(model_name)
 model = MBartForConditionalGeneration.from_pretrained(model_name)
 
+# Mover el modelo al dispositivo disponible (GPU si es posible, si no, CPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
-model.eval()
+model.eval() # Poner el modelo en modo de evaluación
 print(f"Modelo cargado en {device}")
 
 # -----------------------------
@@ -60,61 +60,136 @@ LANG_NAME_MAP = {
 # Función de traducción
 # -----------------------------
 def traducir_en_es(texto: str) -> str:
-    if not texto.strip():
-        return ""
+    """
+    Toma un texto, lo divide en párrafos, detecta el idioma de cada uno
+    y lo traduce al español.
+    """
+    if not texto or not texto.strip():
+        return "" # Devuelve vacío si la entrada está vacía
 
+    # Divide el texto en párrafos y elimina los que estén vacíos
     parrafos = [p.strip() for p in texto.split('\n') if p.strip()]
     bloques_de_texto = []
 
     for parrafo in parrafos:
         try:
+            # Detecta el idioma del párrafo
             lang_code_short = detect(parrafo)
+            # Busca el código de idioma completo para el modelo mBART
             src_lang_code = LANG_CODE_MAP.get(lang_code_short, "en_XX")
         except LangDetectException:
+            # Si la detección falla, asume inglés por defecto
             lang_code_short = 'en'
             src_lang_code = "en_XX"
 
+        # Prepara el texto para el modelo
         tokenizer.src_lang = src_lang_code
         inputs = tokenizer(parrafo, return_tensors="pt").to(device)
 
+        # Genera la traducción, forzando la salida en español
         generated_tokens = model.generate(
             **inputs,
             forced_bos_token_id=tokenizer.lang_code_to_id["es_XX"],
-            max_length=1024,
-            num_beams=4,
-            length_penalty=1.2, 
+            max_length=1024, # Límite de tokens para la traducción
+            num_beams=4,      # Usa beam search para mejores resultados
+            length_penalty=1.2,
             early_stopping=True
         )
         
+        # Decodifica los tokens generados para obtener el texto final
         traduccion_parrafo = tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
         nombre_idioma = LANG_NAME_MAP.get(lang_code_short, lang_code_short.upper())
         
+        # Formatea la salida para indicar el idioma de origen
         bloque_formateado = f"Idioma de origen: {nombre_idioma}.\n{traduccion_parrafo}"
         bloques_de_texto.append(bloque_formateado)
 
+    # Une todos los párrafos traducidos con un doble salto de línea
     return "\n\n".join(bloques_de_texto)
 
-# -----------------------------
-# Interfaz de Gradio
-# -----------------------------
-iface = gr.Interface(
-    fn=traducir_en_es,
-    inputs=gr.Textbox(
-        lines=10,
-        label="Texto en cualquier idioma (puedes mezclar idiomas por párrafos)",
-        placeholder="Escribe aquí el texto que quieres traducir..."
-    ),
-    outputs=gr.Textbox(label="Traducción al Español"),
-    title="🤖 Traductor IA Multilingüe a Español",
-    description="Este traductor detecta el idioma de cada párrafo y lo traduce a español, indicando el idioma de origen.",
-    examples=[
-        ["The quick brown fox jumps over the lazy dog.\nLa vie est belle quand on poursuit ses rêves."]
-    ],
-    allow_flagging="never"
-)
+# -------------------------------------------------------------
+# Interfaz de Gradio Mejorada con gr.Blocks
+# -------------------------------------------------------------
+
+# CSS personalizado para afinar detalles y darle un toque minimalista.
+custom_css = """
+/* Estilo general del contenedor */
+#main_container {
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    padding: 20px;
+}
+/* Espaciado del título */
+#app_title {
+    text-align: center;
+    color: #333;
+    margin-bottom: 5px;
+}
+/* Espaciado de la descripción */
+#app_description {
+    text-align: center;
+    color: #555;
+    margin-bottom: 25px;
+}
+"""
+
+# Usamos gr.Blocks para tener control total sobre el diseño.
+with gr.Blocks(theme=gr.themes.Soft(), css=custom_css) as iface:
+    
+    # 1. Título y Descripción usando Markdown
+    with gr.Column(elem_id="main_container"):
+        gr.Markdown("# 🤖 Traductor IA Multilingüe a Español", elem_id="app_title")
+        gr.Markdown("Detecta automáticamente el idioma de cada párrafo y lo traduce al español. ¡Prueba a mezclar idiomas!", elem_id="app_description")
+
+        # 2. Layout de dos columnas para entrada y salida
+        with gr.Row():
+            # Columna de la izquierda: Entrada de texto
+            with gr.Column(scale=1):
+                input_textbox = gr.Textbox(
+                    lines=15,
+                    label="Texto a Traducir",
+                    placeholder="Escribe aquí el texto que quieres traducir...\n\nThe quick brown fox jumps over the lazy dog."
+                )
+                
+                translate_button = gr.Button("Traducir 📝", variant="primary")
+
+            # Columna de la derecha: Salida de la traducción
+            with gr.Column(scale=1):
+                output_textbox = gr.Textbox(
+                    lines=15,
+                    label="Resultado de la Traducción",
+                    interactive=False, # El usuario no puede escribir aquí
+                    show_copy_button=True # Botón para copiar el resultado fácilmente
+                )
+        
+        # 3. Sección de Ejemplos Interactivos
+        gr.Examples(
+            examples=[
+                "The quick brown fox jumps over the lazy dog.",
+                "La vie est belle quand on poursuit ses rêves.",
+                "こんにちは、世界！", # Japonés: Hola, mundo!
+                "The rain in Spain stays mainly in the plain.\nDer Regen in Spanien bleibt hauptsächlich in der Ebene." # Inglés y Alemán
+            ],
+            inputs=input_textbox,
+            outputs=output_textbox,
+            fn=traducir_en_es,
+            cache_examples=True # Acelera la ejecución de los ejemplos
+        )
+        
+        # 4. Pie de página (Footer)
+        gr.Markdown("<p style='text-align:center; color: #888;'>Proyecto IA-Traductor v1</p>")
+
+    # Conectar el botón a la función de traducción
+    translate_button.click(
+        fn=traducir_en_es,
+        inputs=input_textbox,
+        outputs=output_textbox,
+        api_name="translate" # Opcional: nombre para la API
+    )
 
 # -----------------------------
 # Lanzar la app
 # -----------------------------
 if __name__ == "__main__":
+    # Escucha en todas las interfaces de red (0.0.0.0) para que sea accesible desde Docker
     iface.launch(server_name="0.0.0.0", server_port=8000)
