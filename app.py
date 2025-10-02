@@ -34,7 +34,7 @@ def traducir_en_es(texto: str) -> str:
         input_ids=input_ids,
         attention_mask=attention_mask,
         forced_bos_token_id=tokenizer.lang_code_to_id["es_XX"],  # español
-        max_length=256,
+        max_length=1024,
         num_beams=4,
         early_stopping=True
     )
