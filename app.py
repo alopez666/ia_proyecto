@@ -82,7 +82,7 @@ def traducir_en_es(texto: str) -> str:
             forced_bos_token_id=tokenizer.lang_code_to_id["es_XX"],
             max_length=1024,
             num_beams=4,
-            length_penalty=1.1, 
+            length_penalty=1.2, 
             early_stopping=True
         )
         
