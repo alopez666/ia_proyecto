@@ -4,12 +4,13 @@ import torch
 import gradio as gr
 from langdetect import detect, LangDetectException
 
+# (El código de carga del modelo no cambia)
 # -----------------------------
 # Cargar modelo y tokenizer
 # -----------------------------
 model_name = "facebook/mbart-large-50-many-to-many-mmt"
 print("Cargando modelo, esto puede tardar unos segundos...")
-tokenizer = MBart50TokenizerFast.from_pretrained(model_name)
+tokenizer = MBartForConditionalGeneration.from_pretrained(model_name)
 model = MBartForConditionalGeneration.from_pretrained(model_name)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
@@ -17,7 +18,7 @@ model.eval()
 print(f"Modelo cargado en {device}")
 
 # -----------------------------
-# MAPA DE CÓDIGOS DE IDIOMA (langdetect -> mBART)
+# MAPA DE CÓDIGOS DE IDIOMA (Funcional)
 # -----------------------------
 LANG_CODE_MAP = {
     'af': 'af_ZA', 'ar': 'ar_AR', 'az': 'az_AZ', 'bn': 'bn_IN',
@@ -35,22 +36,33 @@ LANG_CODE_MAP = {
     'ur': 'ur_PK', 'vi': 'vi_VN', 'zh-cn': 'zh_CN'
 }
 
-# Diccionario para mostrar nombres amigables de idiomas en la interfaz
+# --- ¡CAMBIO AQUÍ! ---
+# Diccionario para mostrar nombres amigables (VERSIÓN COMPLETA)
 LANG_NAME_MAP = {
-    'en': 'Inglés', 'fr': 'Francés', 'de': 'Alemán', 'es': 'Español',
-    'it': 'Italiano', 'pt': 'Portugués', 'ru': 'Ruso', 'ja': 'Japonés',
-    'zh-cn': 'Chino', 'ar': 'Árabe', 'hi': 'Hindi', 'ko': 'Coreano',
+    'af': 'Afrikáans', 'ar': 'Árabe', 'az': 'Azerbaiyano', 'bn': 'Bengalí',
+    'cs': 'Checo', 'de': 'Alemán', 'en': 'Inglés', 'es': 'Español',
+    'et': 'Estonio', 'fa': 'Persa', 'fi': 'Finlandés', 'fr': 'Francés',
+    'gl': 'Gallego', 'gu': 'Guyaratí', 'he': 'Hebreo', 'hi': 'Hindi',
+    'hr': 'Croata', 'id': 'Indonesio', 'it': 'Italiano', 'ja': 'Japonés',
+    'ka': 'Georgiano', 'kk': 'Kazajo', 'km': 'Jemer', 'ko': 'Coreano',
+    'lt': 'Lituano', 'lv': 'Letón', 'mk': 'Macedonio', 'ml': 'Malayalam',
+    'mn': 'Mongol', 'mr': 'Maratí', 'my': 'Birmano', 'ne': 'Nepalí',
+    'nl': 'Neerlandés', 'pl': 'Polaco', 'ps': 'Pastún', 'pt': 'Portugués',
+    'ro': 'Rumano', 'ru': 'Ruso', 'si': 'Cingalés', 'sl': 'Esloveno',
+    'sv': 'Sueco', 'sw': 'Suajili', 'ta': 'Tamil', 'te': 'Telugu',
+    'th': 'Tailandés', 'tl': 'Tagalo', 'tr': 'Turco', 'uk': 'Ucraniano',
+    'ur': 'Urdu', 'vi': 'Vietnamita', 'zh-cn': 'Chino'
 }
 
+# (El resto del código, como la función de traducción y la interfaz, es exactamente el mismo)
 # -----------------------------
-# Función de traducción (MODIFICADA PARA EL NUEVO FORMATO)
+# Función de traducción
 # -----------------------------
 def traducir_en_es(texto: str) -> str:
     if not texto.strip():
         return ""
 
     parrafos = [p.strip() for p in texto.split('\n') if p.strip()]
-    # --- CAMBIO ---: Guardaremos bloques de texto ya formateados
     bloques_de_texto = []
 
     for parrafo in parrafos:
@@ -69,22 +81,20 @@ def traducir_en_es(texto: str) -> str:
             forced_bos_token_id=tokenizer.lang_code_to_id["es_XX"],
             max_length=1024,
             num_beams=4,
+            length_penalty=1.1, 
             early_stopping=True
         )
         
         traduccion_parrafo = tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
         nombre_idioma = LANG_NAME_MAP.get(lang_code_short, lang_code_short.upper())
         
-        # --- CAMBIO PRINCIPAL ---
-        # Creamos el bloque de texto con el formato exacto que pediste
         bloque_formateado = f"Idioma de origen: {nombre_idioma}.\n{traduccion_parrafo}"
         bloques_de_texto.append(bloque_formateado)
 
-    # Unimos cada bloque con dos saltos de línea para dejar un espacio en blanco entre ellos
     return "\n\n".join(bloques_de_texto)
 
 # -----------------------------
-# Interfaz de Gradio (MODIFICADA)
+# Interfaz de Gradio
 # -----------------------------
 iface = gr.Interface(
     fn=traducir_en_es,
@@ -93,7 +103,6 @@ iface = gr.Interface(
         label="Texto en cualquier idioma (puedes mezclar idiomas por párrafos)",
         placeholder="Escribe aquí el texto que quieres traducir..."
     ),
-    # --- CAMBIO ---: Regresamos a un Textbox normal
     outputs=gr.Textbox(label="Traducción al Español"),
     title="🤖 Traductor IA Multilingüe a Español",
     description="Este traductor detecta el idioma de cada párrafo y lo traduce a español, indicando el idioma de origen.",
@@ -104,7 +113,7 @@ iface = gr.Interface(
 )
 
 # -----------------------------
-# Lanzar la app (Gradio)
+# Lanzar la app
 # -----------------------------
 if __name__ == "__main__":
     iface.launch(server_name="0.0.0.0", server_port=8000)
