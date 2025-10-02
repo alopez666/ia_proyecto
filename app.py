@@ -4,14 +4,17 @@ import torch
 import gradio as gr
 from langdetect import detect, LangDetectException
 
-# (El código de carga del modelo no cambia)
 # -----------------------------
 # Cargar modelo y tokenizer
 # -----------------------------
 model_name = "facebook/mbart-large-50-many-to-many-mmt"
 print("Cargando modelo, esto puede tardar unos segundos...")
-tokenizer = MBartForConditionalGeneration.from_pretrained(model_name)
+
+# --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+# Se usa MBart50TokenizerFast para el tokenizer y MBartForConditionalGeneration para el modelo.
+tokenizer = MBart50TokenizerFast.from_pretrained(model_name)
 model = MBartForConditionalGeneration.from_pretrained(model_name)
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 model.eval()
@@ -36,7 +39,6 @@ LANG_CODE_MAP = {
     'ur': 'ur_PK', 'vi': 'vi_VN', 'zh-cn': 'zh_CN'
 }
 
-# --- ¡CAMBIO AQUÍ! ---
 # Diccionario para mostrar nombres amigables (VERSIÓN COMPLETA)
 LANG_NAME_MAP = {
     'af': 'Afrikáans', 'ar': 'Árabe', 'az': 'Azerbaiyano', 'bn': 'Bengalí',
@@ -54,7 +56,6 @@ LANG_NAME_MAP = {
     'ur': 'Urdu', 'vi': 'Vietnamita', 'zh-cn': 'Chino'
 }
 
-# (El resto del código, como la función de traducción y la interfaz, es exactamente el mismo)
 # -----------------------------
 # Función de traducción
 # -----------------------------
