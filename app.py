@@ -1,20 +1,11 @@
 # app.py
-from fastapi import FastAPI
-from pydantic import BaseModel
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import torch
-import uvicorn
-import gradio as gr # <--- 1. Importar Gradio
+import gradio as gr
 
 # -----------------------------
-# Definir app y modelo
+# Cargar modelo
 # -----------------------------
-# Se mantiene la creación de la app FastAPI como antes
-app = FastAPI(title="API Traductor Inglés -> Español + Interfaz Gradio")
-
-class Texto(BaseModel):
-    texto: str
-
 model_name = "facebook/mbart-large-50-many-to-many-mmt"
 print("Cargando modelo, esto puede tardar unos segundos...")
 tokenizer = MBart50TokenizerFast.from_pretrained(model_name)
@@ -25,14 +16,14 @@ model.eval()
 print(f"Modelo cargado en {device}")
 
 # -----------------------------
-# Función de traducción (sin cambios)
+# Función de traducción
 # -----------------------------
 def traducir_en_es(texto: str) -> str:
     """
     Esta función toma un texto en inglés y lo traduce al español usando el modelo MBart.
     """
     if not texto.strip():
-        return "" # Evita procesar texto vacío
+        return ""  # Evita procesar texto vacío
         
     tokenizer.src_lang = "en_XX"  # inglés
     inputs = tokenizer(texto, return_tensors="pt")
@@ -50,20 +41,15 @@ def traducir_en_es(texto: str) -> str:
     return tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
 
 # -----------------------------
-# Endpoint de la API (sin cambios)
+# Interfaz de Gradio
 # -----------------------------
-@app.post("/traducir")
-def traducir_api(data: Texto):
-    traduccion = traducir_en_es(data.texto)
-    return {"traduccion": traduccion}
-
-# -------------------------------------------------------------------
-# 2. Crear la interfaz de Gradio
-# -------------------------------------------------------------------
-# Se define la interfaz usando la misma función de traducción 'traducir_en_es'
 iface = gr.Interface(
     fn=traducir_en_es,
-    inputs=gr.Textbox(lines=5, label="Texto en Inglés", placeholder="Escribe aquí el texto que quieres traducir..."),
+    inputs=gr.Textbox(
+        lines=5, 
+        label="Texto en Inglés", 
+        placeholder="Escribe aquí el texto que quieres traducir..."
+    ),
     outputs=gr.Textbox(label="Traducción al Español"),
     title="🤖 Traductor IA (Inglés a Español)",
     description="Este es un traductor basado en el modelo MBart de Facebook. Escribe una frase en inglés para ver la magia.",
@@ -75,9 +61,8 @@ iface = gr.Interface(
     allow_flagging="never"
 )
 
-# -------------------------------------------------------------------
-# 3. Montar la interfaz de Gradio en la app de FastAPI
-# -------------------------------------------------------------------
-# Esta línea clave combina ambas aplicaciones. La interfaz Gradio será accesible
-# en la ruta raíz ("/"), mientras que tu API seguirá en "/traducir".
-app = gr.mount_gradio_app(app, iface, path="/")
+# -----------------------------
+# Lanzar la app (Gradio)
+# -----------------------------
+if __name__ == "__main__":
+    iface.launch(server_name="0.0.0.0", server_port=8000)
