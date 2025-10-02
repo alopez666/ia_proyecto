@@ -54,53 +54,58 @@ LANG_NAME_MAP = {
 }
 
 # -----------------------------
-# Función de traducción mejorada
+# Función de traducción OPTIMIZADA
 # -----------------------------
 def traducir_en_es(texto: str) -> str:
+    """
+    Traduce un texto al español, detectando el idioma de cada párrafo
+    y procesando cada uno de ellos en una sola llamada al modelo para mayor eficiencia.
+    """
     if not texto or not texto.strip():
         return ""
     
+    # 1. Dividir el texto en párrafos. Esto es útil para detectar diferentes idiomas
+    # en un mismo texto y mantener la estructura.
     parrafos = [p.strip() for p in texto.split('\n') if p.strip()]
-    bloques_de_texto = []
+    traducciones_finales = []
 
     for parrafo in parrafos:
+        # 2. Detectar el idioma del párrafo.
         try:
-            lang_code_short = detect(parrafo)
+            # Usar una porción del párrafo para una detección más rápida y precisa.
+            lang_code_short = detect(parrafo[:500])
             src_lang_code = LANG_CODE_MAP.get(lang_code_short, "en_XX")
         except LangDetectException:
+            # Si la detección falla, se asume inglés por defecto.
             lang_code_short = 'en'
             src_lang_code = "en_XX"
 
         tokenizer.src_lang = src_lang_code
 
-        # Dividir en frases cortas usando puntos como referencia
-        frases = [f.strip() for f in parrafo.split('.') if f.strip()]
-        traducciones_frases = []
-
-        for frase in frases:
-            inputs = tokenizer(frase, return_tensors="pt").to(device)
-            generated_tokens = model.generate(
-                **inputs,
-                forced_bos_token_id=tokenizer.lang_code_to_id["es_XX"],
-                max_length=1024,
-                num_beams=5,
-                length_penalty=1.2,
-                early_stopping=True
-            )
-            traduccion = tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
-            traducciones_frases.append(traduccion)
-
-        traduccion_parrafo = '. '.join(traducciones_frases)
-        if traduccion_parrafo and not traduccion_parrafo.endswith('.'):
-            traduccion_parrafo += '.'
+        # 3. **OPTIMIZACIÓN CLAVE**: Tokenizar y traducir el PÁRRAFO COMPLETO de una sola vez.
+        # Se elimina el bucle ineficiente que procesaba frase por frase.
+        inputs = tokenizer(parrafo, return_tensors="pt", padding=True, truncation=True, max_length=1024).to(device)
+        
+        generated_tokens = model.generate(
+            **inputs,
+            forced_bos_token_id=tokenizer.lang_code_to_id["es_XX"],
+            max_length=1024,  # Asegurarse de que haya espacio para el párrafo traducido
+            num_beams=5,
+            length_penalty=1.2,
+            early_stopping=True
+        )
+        
+        # 4. Decodificar la traducción completa del párrafo.
+        traduccion_parrafo = tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
 
         nombre_idioma = LANG_NAME_MAP.get(lang_code_short, lang_code_short.upper())
-        bloques_de_texto.append(f"Idioma de origen: {nombre_idioma}.\n{traduccion_parrafo}")
+        traducciones_finales.append(f"Idioma de origen: {nombre_idioma}.\n{traduccion_parrafo}")
 
-    return "\n\n".join(bloques_de_texto)
+    # 5. Unir los párrafos traducidos con un doble salto de línea.
+    return "\n\n".join(traducciones_finales)
 
 # -------------------------------------------------------------
-# Interfaz de Gradio
+# Interfaz de Gradio (Sin cambios)
 # -------------------------------------------------------------
 custom_css = """
 #main_container {
@@ -161,7 +166,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css) as iface:
     )
 
 # -----------------------------
-# Lanzar la app
+# Lanzar la app (Sin cambios)
 # -----------------------------
 if __name__ == "__main__":
     iface.launch(server_name="0.0.0.0", server_port=8000)
