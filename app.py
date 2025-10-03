@@ -147,7 +147,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css) as iface:
         gr.Examples(
             examples=[
                 "Every day is a new chance to start again.",
-                "La vie est belle quand on apprend à l’apprécier.",
+                "Acredite nos seus sonhos e trabalhe por eles.",
                 "小さな努力が大きな結果につながります",
                 "작은 시작이 큰 변화를 만들 수 있습니다."
             ],
