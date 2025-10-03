@@ -322,7 +322,7 @@ if __name__ == "__main__":
     print("\n" + "="*70)
     print("🚀 TRADUCTOR IA ULTRARRÁPIDO - Iniciando...")
     print("="*70)
-    print(f"💻 Dispositivo: {device.upper()}")
+    print(f"💻 Dispositivo: {str(device).upper()}")
     print(f"📱 URL Local: http://localhost:8000")
     print(f"🌐 URL Red: http://0.0.0.0:8000")
     print("="*70)
