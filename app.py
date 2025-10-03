@@ -146,10 +146,10 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css) as iface:
                 )
         gr.Examples(
             examples=[
-                "The quick brown fox jumps over the lazy dog.",
-                "La vie est belle quand on poursuit ses rêves.",
-                "こんにちは、世界！",
-                "The rain in Spain stays mainly in the plain.\nDer Regen in Spanien bleibt hauptsächlich in der Ebene."
+                "Every day is a new chance to start again.",
+                "La vie est belle quand on apprend à l’apprécier.",
+                "小さな努力が大きな結果につながります",
+                "작은 시작이 큰 변화를 만들 수 있습니다."
             ],
             inputs=input_textbox,
             outputs=output_textbox,
