@@ -17,13 +17,14 @@ try:
     model = MBartForConditionalGeneration.from_pretrained(MODEL_NAME)
     model.to(DEVICE)
     model.eval()
-    print(f"✅ Modelo '{MODEL_NAME}' cargado exitosamente en {DEVICE}")
+    # Este mensaje ahora mostrará 'cuda' o 'cpu' correctamente
+    print(f"✅ Modelo '{MODEL_NAME}' cargado exitosamente en {DEVICE.type}")
 except Exception as e:
     print(f"🚨 Error al cargar el modelo: {e}")
     exit()
 
 # -----------------------------
-# MAPA DE CÓDIGOS DE IDIOMA (sin cambios)
+# MAPA DE CÓDIGOS DE IDIOMA
 # -----------------------------
 LANG_CODE_MAP = {
     'af': 'af_ZA', 'ar': 'ar_AR', 'az': 'az_AZ', 'bn': 'bn_IN', 'cs': 'cs_CZ', 
@@ -53,14 +54,11 @@ LANG_NAME_MAP = {
     'zh-cn': 'Chino', 'zh-tw': 'Chino'
 }
 
-
 def limpiar_texto(texto: str) -> str:
-    """Limpia el texto de entrada eliminando espacios extra."""
     texto = re.sub(r'\s+', ' ', texto)
     return texto.strip()
 
 def detectar_idioma_robusto(texto: str) -> tuple:
-    """Detecta el idioma de forma robusta, devolviendo 'en' como fallback."""
     try:
         muestra = texto if len(texto) < 500 else texto[:500]
         lang_code_short = detect(muestra)
@@ -70,39 +68,27 @@ def detectar_idioma_robusto(texto: str) -> tuple:
     except LangDetectException:
         return 'en', 'en_XX', 'Inglés (por defecto)'
 
-# -----------------------------
-# 🚀 FUNCIÓN DE TRADUCCIÓN ÚNICA Y OPTIMIZADA
-# -----------------------------
 def traducir_a_espanol(texto: str) -> str:
-    """
-    Traduce texto de múltiples idiomas al español con una configuración universal
-    optimizada para calidad y velocidad.
-    """
     if not texto or not texto.strip():
         return "⚠️ Por favor, ingresa un texto para traducir."
     
     inicio = time.time()
     texto_limpio = limpiar_texto(texto)
     
-    # Detección de idioma
     lang_short, src_lang_code, nombre_idioma = detectar_idioma_robusto(texto_limpio)
     
     if lang_short == 'es':
         return f"✅ El texto ya está en Español:\n\n---\n{texto}\n---"
 
-    # --- CONFIGURACIÓN DE GENERACIÓN UNIVERSAL Y ROBUSTA ---
-    # Se usa una configuración equivalente al modo "Balanceado" para garantizar
-    # alta calidad en todos los casos, incluyendo textos muy cortos.
     spanish_token_id = tokenizer.lang_code_to_id["es_XX"]
-    
     tokenizer.src_lang = src_lang_code
     inputs = tokenizer(texto_limpio, return_tensors="pt", padding=True, truncation=True, max_length=1024).to(DEVICE)
 
     num_tokens = inputs.input_ids.shape[1]
-    max_len = int(num_tokens * 3.0) + 10 # Margen generoso para la traducción
+    max_len = int(num_tokens * 3.0) + 10
     
     gen_config = {
-        "num_beams": 5,                 # Aumentado para máxima calidad
+        "num_beams": 5,
         "max_length": min(max_len, 1024),
         "early_stopping": True,
         "no_repeat_ngram_size": 3,
@@ -110,7 +96,6 @@ def traducir_a_espanol(texto: str) -> str:
         "length_penalty": 1.0
     }
 
-    # 🚀 GENERAR TRADUCCIÓN
     with torch.no_grad():
         generated_tokens = model.generate(
             **inputs,
@@ -183,14 +168,15 @@ with gr.Blocks(theme=gr.themes.Soft()) as iface:
             cache_examples=False
         )
 
-# Event Handlers
-translate_button.click(
-    fn=traducir_a_espanol,
-    inputs=input_textbox,
-    outputs=output_textbox,
-    api_name="translate"
-)
-clear_button.click(lambda: ("", ""), inputs=None, outputs=[input_textbox, output_textbox])
+    # --- CORRECCIÓN DE INDENTACIÓN ---
+    # Los "event handlers" deben estar DENTRO del bloque "with gr.Blocks"
+    translate_button.click(
+        fn=traducir_a_espanol,
+        inputs=input_textbox,
+        outputs=output_textbox,
+        api_name="translate"
+    )
+    clear_button.click(lambda: ("", ""), inputs=None, outputs=[input_textbox, output_textbox])
 
 # -----------------------------
 # Lanzar la aplicación
