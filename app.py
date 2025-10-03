@@ -55,7 +55,7 @@ LANG_NAME_MAP = {
 
 def limpiar_texto(texto: str) -> str:
     """Limpia el texto de entrada eliminando espacios extras y caracteres problemáticos."""
-    texto = re.sub(r'\s+', ' ', texto)  # Normalizar espacios
+    texto = re.sub(r'\s+', ' ', texto)
     texto = texto.strip()
     return texto
 
@@ -65,37 +65,30 @@ def detectar_idioma_robusto(texto: str) -> tuple:
     Retorna: (código_corto, código_mbart, nombre_idioma)
     """
     try:
-        # Para textos muy cortos, usar el texto completo
         muestra = texto if len(texto) < 100 else texto[:300]
         lang_code_short = detect(muestra)
-        
-        # Mapear el código detectado
         src_lang_code = LANG_CODE_MAP.get(lang_code_short, "en_XX")
         nombre_idioma = LANG_NAME_MAP.get(lang_code_short, lang_code_short.upper())
-        
         return lang_code_short, src_lang_code, nombre_idioma
     except LangDetectException:
-        # Si falla, asumir inglés
         return 'en', 'en_XX', 'Inglés'
 
 # -----------------------------
-# Función de traducción OPTIMIZADA Y CORREGIDA
+# Función de traducción CORREGIDA
 # -----------------------------
 def traducir_en_es(texto: str) -> str:
     """
     Traduce un texto al español, detectando el idioma de cada párrafo.
-    Versión corregida para manejar textos cortos y largos correctamente.
+    VERSIÓN CORREGIDA: Ahora fuerza correctamente el español como idioma de destino.
     """
     if not texto or not texto.strip():
         return "⚠️ Por favor, ingresa un texto para traducir."
     
     texto = limpiar_texto(texto)
     
-    # Si el texto es muy corto (menos de 3 palabras), advertir
-    if len(texto.split()) < 3:
+    if len(texto.split()) < 2:
         return "⚠️ El texto es demasiado corto. Intenta con al menos una frase completa."
     
-    # Dividir en párrafos
     parrafos = [p.strip() for p in texto.split('\n') if p.strip()]
     if not parrafos:
         return "⚠️ No se detectó texto válido."
@@ -103,58 +96,53 @@ def traducir_en_es(texto: str) -> str:
     traducciones_finales = []
 
     for parrafo in parrafos:
-        # Detectar idioma del párrafo
         lang_short, src_lang_code, nombre_idioma = detectar_idioma_robusto(parrafo)
         
-        # Si ya está en español, no traducir
         if lang_short == 'es':
             traducciones_finales.append(f"✓ Ya está en español:\n{parrafo}")
             continue
         
-        # Configurar idioma de origen
+        # ⭐ CORRECCIÓN CRÍTICA: Configurar AMBOS idiomas explícitamente
         tokenizer.src_lang = src_lang_code
         
-        # Tokenizar con límites adaptativos
-        longitud_texto = len(parrafo.split())
-        max_input_length = min(512, max(128, longitud_texto * 2))
-        max_output_length = min(512, max(64, longitud_texto * 3))
-        
+        # Tokenizar el texto de entrada
         inputs = tokenizer(
             parrafo, 
             return_tensors="pt", 
             padding=True, 
             truncation=True, 
-            max_length=max_input_length
+            max_length=512
         ).to(device)
         
-        # Generar traducción con parámetros optimizados
+        # ⭐ SOLUCIÓN: Obtener el ID del token de español y forzarlo correctamente
+        # El token "es_XX" debe estar al inicio de la secuencia generada
+        spanish_token_id = tokenizer.convert_tokens_to_ids("es_XX")
+        
+        # Generar traducción CON CONFIGURACIÓN CORRECTA
         with torch.no_grad():
             generated_tokens = model.generate(
                 **inputs,
-                forced_bos_token_id=tokenizer.lang_code_to_id["es_XX"],
-                max_length=max_output_length,
-                min_length=max(10, longitud_texto // 2),  # Evitar traducciones muy cortas
-                num_beams=3,  # Reducido de 5 a 3 para más variabilidad
-                length_penalty=1.0,  # Reducido de 1.2 a 1.0
+                forced_bos_token_id=spanish_token_id,  # ⭐ Forzar español como primer token
+                max_length=512,
+                num_beams=5,
                 early_stopping=True,
-                no_repeat_ngram_size=3,  # Evitar repeticiones
-                do_sample=False,  # Desactivar sampling para consistencia
-                temperature=1.0
+                decoder_start_token_id=spanish_token_id  # ⭐ CRÍTICO: También configurar aquí
             )
         
-        # Decodificar
-        traduccion_parrafo = tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
+        # ⭐ DECODIFICACIÓN CORRECTA: Configurar el idioma de destino antes de decodificar
+        tokenizer.tgt_lang = "es_XX"
+        traduccion_parrafo = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
         traduccion_parrafo = limpiar_texto(traduccion_parrafo)
         
-        # Verificar que la traducción no esté vacía
-        if not traduccion_parrafo or len(traduccion_parrafo) < 3:
-            traduccion_parrafo = f"⚠️ No se pudo traducir este párrafo: {parrafo[:50]}..."
+        if not traduccion_parrafo or len(traduccion_parrafo) < 2:
+            traduccion_parrafo = f"⚠️ Error al traducir: {parrafo[:50]}..."
         
         traducciones_finales.append(
-            f"🌐 Detectado: {nombre_idioma}\n📝 Traducción:\n{traduccion_parrafo}"
+            f"🌐 Idioma detectado: {nombre_idioma} ({src_lang_code})\n"
+            f"📝 Traducción al español:\n{traduccion_parrafo}"
         )
 
-    return "\n\n" + "─" * 50 + "\n\n".join(traducciones_finales)
+    return "\n\n" + "─" * 60 + "\n\n".join(traducciones_finales)
 
 # -------------------------------------------------------------
 # Interfaz de Gradio
@@ -164,80 +152,119 @@ custom_css = """
     border-radius: 12px;
     box-shadow: 0 4px 8px rgba(0,0,0,0.05);
     padding: 20px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
 }
 #app_title {
     text-align: center;
-    color: #333;
+    color: #2c3e50;
     margin-bottom: 5px;
+    font-weight: bold;
 }
 #app_description {
     text-align: center;
-    color: #555;
+    color: #34495e;
     margin-bottom: 25px;
 }
 """
 
 with gr.Blocks(theme=gr.themes.Soft(), css=custom_css) as iface:
     with gr.Column(elem_id="main_container"):
-        gr.Markdown("# 🤖 Traductor IA Multilingüe a Español", elem_id="app_title")
+        gr.Markdown("# 🌍 Traductor IA Multilingüe → Español", elem_id="app_title")
         gr.Markdown(
-            "Detecta automáticamente el idioma y traduce al español con IA. "
-            "¡Prueba con diferentes idiomas!",
+            "**Traducción automática con detección de idioma**  \n"
+            "Soporta más de 50 idiomas. ¡Prueba ahora!",
             elem_id="app_description"
         )
         
         with gr.Row():
             with gr.Column(scale=1):
                 input_textbox = gr.Textbox(
-                    lines=15,
-                    label="📥 Texto a Traducir",
-                    placeholder="Escribe aquí el texto que quieres traducir...\n\nEjemplo:\nThe quick brown fox jumps over the lazy dog."
+                    lines=12,
+                    label="📥 Texto Original",
+                    placeholder="Escribe o pega aquí el texto en cualquier idioma...\n\n"
+                                "Ejemplo:\nGuten Tag! Ich lerne Deutsch.\n\n"
+                                "El sistema detectará automáticamente el idioma y lo traducirá al español.",
+                    max_lines=20
                 )
-                translate_button = gr.Button("🔄 Traducir", variant="primary", size="lg")
+                
+                with gr.Row():
+                    translate_button = gr.Button("🔄 Traducir a Español", variant="primary", size="lg")
+                    clear_button = gr.Button("🗑️ Limpiar", variant="secondary")
                 
             with gr.Column(scale=1):
                 output_textbox = gr.Textbox(
-                    lines=15,
-                    label="📤 Resultado de la Traducción",
+                    lines=12,
+                    label="📤 Traducción en Español",
                     interactive=False,
-                    show_copy_button=True
+                    show_copy_button=True,
+                    max_lines=20
                 )
+        
+        gr.Markdown("### 📋 Ejemplos para probar:")
         
         gr.Examples(
             examples=[
-                ["Hello world! How are you today?"],
-                ["Bonjour, comment allez-vous? La vie est belle."],
-                ["Guten Tag! Ich lerne Deutsch."],
-                ["Ciao! Come stai? Sono felice di vederti."],
-                ["こんにちは。今日はいい天気ですね。"],
-                ["Olá! Como você está? Tenha um ótimo dia!"],
-                ["안녕하세요! 오늘 날씨가 정말 좋네요."],
-                ["Привет! Как дела? Надеюсь, у тебя всё хорошо."]
+                ["Hello world! How are you today? I hope you're having a great day!"],
+                ["Guten Tag! Ich lerne Deutsch. Es macht mir viel Spaß!"],
+                ["Bonjour! Comment allez-vous aujourd'hui? La vie est belle."],
+                ["Ciao! Come stai? Sono molto felice di vederti oggi."],
+                ["こんにちは！今日はとてもいい天気ですね。"],
+                ["Olá! Como você está? Espero que tenha um ótimo dia!"],
+                ["안녕하세요! 오늘 날씨가 정말 좋네요. 행복한 하루 되세요!"],
+                ["Привет! Как дела? Надеюсь, у тебя всё хорошо сегодня."],
+                ["مرحبا! كيف حالك اليوم؟ أتمنى لك يوماً سعيداً!"],
+                ["你好！今天天气真好。祝你有美好的一天！"]
             ],
             inputs=input_textbox,
             outputs=output_textbox,
             fn=traducir_en_es,
-            cache_examples=False,
-            label="📋 Ejemplos de Prueba"
+            cache_examples=False
         )
         
         gr.Markdown(
-            "<p style='text-align:center; color: #888; margin-top: 20px;'>"
-            "💡 Consejo: Funciona mejor con frases completas. "
-            "Soporta más de 50 idiomas."
-            "</p>"
+            "<div style='text-align:center; margin-top: 20px; padding: 15px; "
+            "background: rgba(255,255,255,0.8); border-radius: 8px;'>"
+            "<p style='color: #2c3e50; margin: 5px;'>"
+            "💡 <strong>Consejo:</strong> Funciona mejor con frases completas.</p>"
+            "<p style='color: #7f8c8d; margin: 5px;'>"
+            "🌐 Idiomas soportados: Alemán, Inglés, Francés, Italiano, Portugués, "
+            "Chino, Japonés, Coreano, Árabe, Ruso, y 40+ más.</p>"
+            "</div>",
+            elem_id="tips"
         )
-        gr.Markdown("<p style='text-align:center; color: #888;'>Proyecto IA-Traductor v2.0</p>")
+        
+        gr.Markdown(
+            "<p style='text-align:center; color: #95a5a6; margin-top: 15px;'>"
+            "🤖 Traductor IA v2.1 | Powered by mBART-50</p>"
+        )
 
+    # Event handlers
     translate_button.click(
         fn=traducir_en_es,
         inputs=input_textbox,
         outputs=output_textbox,
         api_name="translate"
     )
+    
+    clear_button.click(
+        fn=lambda: ("", ""),
+        inputs=None,
+        outputs=[input_textbox, output_textbox]
+    )
 
 # -----------------------------
 # Lanzar la app
 # -----------------------------
 if __name__ == "__main__":
-    iface.launch(server_name="0.0.0.0", server_port=8000)
+    print("\n" + "="*60)
+    print("🚀 Iniciando Traductor IA Multilingüe a Español")
+    print("="*60)
+    print(f"📱 Servidor: http://0.0.0.0:8000")
+    print(f"💻 Dispositivo: {device}")
+    print("="*60 + "\n")
+    
+    iface.launch(
+        server_name="0.0.0.0", 
+        server_port=8000,
+        share=False
+    )
