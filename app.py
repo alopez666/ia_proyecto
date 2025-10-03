@@ -154,7 +154,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css) as iface:
             inputs=input_textbox,
             outputs=output_textbox,
             fn=traducir_en_es,
-            cache_examples=True
+            cache_examples=False
         )
         gr.Markdown("<p style='text-align:center; color: #888;'>Proyecto IA-Traductor v1</p>")
 
