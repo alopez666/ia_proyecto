@@ -16,11 +16,10 @@ try:
     tokenizer = MBart50TokenizerFast.from_pretrained(MODEL_NAME)
     model = MBartForConditionalGeneration.from_pretrained(MODEL_NAME)
     model.to(DEVICE)
-    model.eval()  # Poner el modelo en modo de evaluación
+    model.eval()
     print(f"✅ Modelo '{MODEL_NAME}' cargado exitosamente en {DEVICE}")
 except Exception as e:
     print(f"🚨 Error al cargar el modelo: {e}")
-    # Salir si el modelo no se puede cargar
     exit()
 
 # -----------------------------
@@ -63,22 +62,21 @@ def limpiar_texto(texto: str) -> str:
 def detectar_idioma_robusto(texto: str) -> tuple:
     """Detecta el idioma de forma robusta, devolviendo 'en' como fallback."""
     try:
-        # Usar una muestra más grande para mayor precisión
         muestra = texto if len(texto) < 500 else texto[:500]
         lang_code_short = detect(muestra)
         src_lang_code = LANG_CODE_MAP.get(lang_code_short, "en_XX")
         nombre_idioma = LANG_NAME_MAP.get(lang_code_short, "Desconocido")
         return lang_code_short, src_lang_code, nombre_idioma
     except LangDetectException:
-        # Si la detección falla, asumimos inglés como idioma por defecto
-        return 'en', 'en_XX', 'Inglés (detectado por defecto)'
+        return 'en', 'en_XX', 'Inglés (por defecto)'
 
 # -----------------------------
-# 🚀 FUNCIÓN DE TRADUCCIÓN MEJORADA
+# 🚀 FUNCIÓN DE TRADUCCIÓN ÚNICA Y OPTIMIZADA
 # -----------------------------
-def traducir_a_espanol(texto: str, modo_velocidad: str = "⚡ Rápido (Recomendado)") -> str:
+def traducir_a_espanol(texto: str) -> str:
     """
-    Traduce texto de múltiples idiomas al español con 3 modos de velocidad optimizados.
+    Traduce texto de múltiples idiomas al español con una configuración universal
+    optimizada para calidad y velocidad.
     """
     if not texto or not texto.strip():
         return "⚠️ Por favor, ingresa un texto para traducir."
@@ -86,72 +84,41 @@ def traducir_a_espanol(texto: str, modo_velocidad: str = "⚡ Rápido (Recomenda
     inicio = time.time()
     texto_limpio = limpiar_texto(texto)
     
-    if len(texto_limpio.split()) < 2:
-        return "⚠️ El texto es demasiado corto. Intenta con una frase más larga."
-    
-    # Detección de idioma del texto completo para evitar procesar párrafo por párrafo
+    # Detección de idioma
     lang_short, src_lang_code, nombre_idioma = detectar_idioma_robusto(texto_limpio)
     
-    # Si el texto ya está en español, no hacemos nada
     if lang_short == 'es':
         return f"✅ El texto ya está en Español:\n\n---\n{texto}\n---"
 
-    # --- CONFIGURACIÓN DE GENERACIÓN ---
-    # Usamos la forma canónica para obtener el ID del token de idioma
+    # --- CONFIGURACIÓN DE GENERACIÓN UNIVERSAL Y ROBUSTA ---
+    # Se usa una configuración equivalente al modo "Balanceado" para garantizar
+    # alta calidad en todos los casos, incluyendo textos muy cortos.
     spanish_token_id = tokenizer.lang_code_to_id["es_XX"]
     
-    # Tokenizar el texto de entrada
     tokenizer.src_lang = src_lang_code
-    inputs = tokenizer(
-        texto_limpio, 
-        return_tensors="pt", 
-        padding=True, 
-        truncation=True, 
-        max_length=1024  # Aumentamos un poco por si acaso
-    ).to(DEVICE)
+    inputs = tokenizer(texto_limpio, return_tensors="pt", padding=True, truncation=True, max_length=1024).to(DEVICE)
 
-    # --- AJUSTE DINÁMICO DE PARÁMETROS ---
     num_tokens = inputs.input_ids.shape[1]
-    max_len = int(num_tokens * 2.0)  # Permitir que la traducción sea más larga
-    min_len = int(num_tokens * 0.5)  # O más corta
-
-    # Asegurar límites razonables
-    max_len = min(max(max_len, 32), 1024)
-    min_len = max(min_len, 10)
-
-    # Parámetros base para todos los modos
-    base_gen_config = {
-        "max_length": max_len,
-        "min_length": min_len,
-        "early_stopping": True,
-        "no_repeat_ngram_size": 3, # Evita la repetición de secuencias de 3 palabras
-        "repetition_penalty": 1.5, # Penaliza palabras repetidas
-    }
-
-    # Configuración específica por modo
-    if modo_velocidad == "⚡ Rápido (Recomendado)":
-        # LA SOLUCIÓN CLAVE: Usar un beam search mínimo (2) en lugar de greedy (1).
-        # Es casi igual de rápido pero mucho más robusto contra errores de repetición.
-        gen_config = {"num_beams": 2, **base_gen_config}
+    max_len = int(num_tokens * 3.0) + 10 # Margen generoso para la traducción
     
-    elif modo_velocidad == "⚖️ Balanceado":
-        gen_config = {"num_beams": 4, "length_penalty": 1.0, **base_gen_config}
-        
-    else:  # "🎯 Preciso (Más lento)"
-        gen_config = {"num_beams": 6, "length_penalty": 1.2, **base_gen_config}
+    gen_config = {
+        "num_beams": 5,                 # Aumentado para máxima calidad
+        "max_length": min(max_len, 1024),
+        "early_stopping": True,
+        "no_repeat_ngram_size": 3,
+        "repetition_penalty": 1.5,
+        "length_penalty": 1.0
+    }
 
     # 🚀 GENERAR TRADUCCIÓN
     with torch.no_grad():
         generated_tokens = model.generate(
             **inputs,
-            forced_bos_token_id=spanish_token_id, # Indica al modelo el idioma de salida
+            forced_bos_token_id=spanish_token_id,
             **gen_config
         )
     
-    # Decodificar el resultado
     traduccion = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
-    
-    # Post-procesamiento final
     traduccion_final = limpiar_texto(traduccion)
 
     if not traduccion_final:
@@ -159,110 +126,77 @@ def traducir_a_espanol(texto: str, modo_velocidad: str = "⚡ Rápido (Recomenda
 
     tiempo_total = time.time() - inicio
     
-    # Formatear el resultado final
     resultado = (
-        f"🌐 {nombre_idioma} → Español\n\n"
+        f"🌐 {nombre_idioma} → Español\n"
         f"------------------------------------\n"
         f"{traduccion_final}\n"
         f"------------------------------------\n\n"
-        f"⏱️ **Tiempo:** {tiempo_total:.2f}s | ⚙️ **Modo:** {modo_velocidad}"
+        f"⏱️ **Tiempo:** {tiempo_total:.2f} segundos"
     )
     
     return resultado
 
-
 # -------------------------------------------------------------
-# Interfaz de Gradio (sin cambios mayores, solo la función llamada)
+# Interfaz de Gradio Rediseñada
 # -------------------------------------------------------------
-custom_css = """
-#main_container {
-    border-radius: 12px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-}
-"""
-
-with gr.Blocks(theme=gr.themes.Soft(), css=custom_css) as iface:
-    with gr.Column(elem_id="main_container"):
-        gr.Markdown(
-            "# 🌍 Traductor IA Ultrarrápido → Español\n"
-            "### Traduce más de 50 idiomas al español con detección automática."
-        )
-        
-        with gr.Row(equal_height=True):
-            with gr.Column(scale=1):
-                input_textbox = gr.Textbox(
-                    lines=10,
-                    label="📥 Texto Original (cualquier idioma)",
-                    placeholder="Escribe o pega aquí...\n\nEjemplo: The quick brown fox jumps over the lazy dog.",
-                )
-                
-                modo_radio = gr.Radio(
-                    choices=[
-                        "⚡ Rápido (Recomendado)",
-                        "⚖️ Balanceado", 
-                        "🎯 Preciso (Más lento)"
-                    ],
-                    value="⚡ Rápido (Recomendado)",
-                    label="⚙️ Modo de Traducción",
-                    info="Rápido es ideal para la mayoría de los casos."
-                )
-                
-                with gr.Row():
-                    translate_button = gr.Button("🚀 Traducir Ahora", variant="primary")
-                    clear_button = gr.Button("🗑️ Limpiar", variant="secondary")
-                
-            with gr.Column(scale=1):
-                output_textbox = gr.Textbox(
-                    lines=12,
-                    label="📤 Traducción en Español",
-                    interactive=False,
-                    show_copy_button=True,
-                )
-        
-        with gr.Accordion("📋 Ejemplos para Probar", open=False):
-            gr.Examples(
-                examples=[
-                    ["Hello my name is Alan.", "⚡ Rápido (Recomendado)"],
-                    ["Good morning! How are you today?", "⚡ Rápido (Recomendado)"],
-                    ["Guten Tag! Ich lerne Deutsch und es macht mir viel Spaß.", "⚖️ Balanceado"],
-                    ["L'intelligence artificielle transforme notre monde à une vitesse incroyable.", "⚖️ Balanceado"],
-                    ["人工智能正在改变我们的世界。这项技术将在未来发挥重要作用。", "🎯 Preciso (Más lento)"]
-                ],
-                inputs=[input_textbox, modo_radio],
-                outputs=output_textbox,
-                fn=traducir_a_espanol,
-                cache_examples=False
-            )
-        
-        gr.Markdown(
-            """
-            <div style='padding: 15px; border-radius: 8px; margin-top: 20px; border: 1px solid #E0E0E0;'>
-            
-            ### 💡 Guía de Modos:
-            | Modo | Velocidad | Calidad | Ideal Para |
-            |:---:|:---:|:---:|:---|
-            | ⚡ **Rápido** | ~1-3 seg | ⭐⭐⭐⭐ | Frases, chats, uso general. |
-            | ⚖️ **Balanceado** | ~3-8 seg | ⭐⭐⭐⭐⭐ | Párrafos, emails, textos importantes. |
-            | 🎯 **Preciso** | ~10-20 seg | ⭐⭐⭐⭐⭐+ | Documentos, máxima fidelidad. |
-            
-            </div>
-            """
-        )
-
-    translate_button.click(
-        fn=traducir_a_espanol,
-        inputs=[input_textbox, modo_radio],
-        outputs=output_textbox,
-        api_name="translate"
+with gr.Blocks(theme=gr.themes.Soft()) as iface:
+    gr.Markdown(
+        """
+        <div style='text-align: center;'>
+            <h1>🌍 Traductor IA Ultrarrápido → Español</h1>
+            <p>Escribe en cualquier idioma y obtén la traducción al instante.</p>
+        </div>
+        """
     )
     
-    clear_button.click(lambda: ("", ""), inputs=None, outputs=[input_textbox, output_textbox])
+    with gr.Row(equal_height=True):
+        input_textbox = gr.Textbox(
+            lines=10,
+            label="📥 Texto Original (cualquier idioma)",
+            placeholder="Escribe o pega aquí...\n\nPor ejemplo: Hello, how are you?",
+            elem_id="input_textbox"
+        )
+        output_textbox = gr.Textbox(
+            lines=10,
+            label="📤 Traducción en Español",
+            interactive=False,
+            show_copy_button=True,
+            elem_id="output_textbox"
+        )
+    
+    with gr.Row():
+        translate_button = gr.Button("🚀 Traducir Ahora", variant="primary", size="lg")
+        clear_button = gr.Button("🗑️ Limpiar", variant="secondary", size="lg")
+    
+    with gr.Accordion("📋 Ejemplos para Probar", open=True):
+        gr.Examples(
+            examples=[
+                ["Hello"],
+                ["Good morning! How are you today?"],
+                ["Guten Tag! Ich lerne Deutsch und es macht mir viel Spaß."],
+                ["L'intelligence artificielle transforme notre monde à une vitesse incroyable."],
+                ["人工智能正在改变我们的世界。"]
+            ],
+            inputs=input_textbox,
+            outputs=output_textbox,
+            fn=traducir_a_espanol,
+            cache_examples=False
+        )
+
+# Event Handlers
+translate_button.click(
+    fn=traducir_a_espanol,
+    inputs=input_textbox,
+    outputs=output_textbox,
+    api_name="translate"
+)
+clear_button.click(lambda: ("", ""), inputs=None, outputs=[input_textbox, output_textbox])
 
 # -----------------------------
 # Lanzar la aplicación
 # -----------------------------
 if __name__ == "__main__":
     print("\n" + "="*70)
-    print("🚀 LANZANDO LA APLICACIÓN DE TRADUCCIÓN IA")
+    print("🚀 LANZANDO LA APLICACIÓN DE TRADUCCIÓN IA (MODO OPTIMIZADO)")
     print("="*70 + "\n")
     iface.launch(server_name="0.0.0.0", server_port=8000)
